@@ -1,0 +1,33 @@
+CREATE TABLE IF NOT EXISTS build_configs (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT FALSE,
+  domain_allowlist JSONB NOT NULL,
+  modules JSONB NOT NULL,
+  eip712 JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS build_artifacts (
+  id TEXT PRIMARY KEY,
+  config_id TEXT NOT NULL REFERENCES build_configs(id),
+  status TEXT NOT NULL,
+  script_path TEXT,
+  manifest_path TEXT,
+  checksum TEXT,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_records (
+  id TEXT PRIMARY KEY,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  metadata JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,4 +1,4 @@
-export type BuildStatus = 'QUEUED' | 'COMPILING' | 'READY' | 'FAILED';
+export type BuildStatus = 'QUEUED' | 'COMPILING' | 'READY' | 'FAILED' | 'PUBLISHED' | 'ROLLED_BACK';
 
 export interface BuilderConfig {
   name: string;
@@ -20,8 +20,9 @@ export interface BuildArtifact {
   config: BuilderConfig;
   scriptPath?: string;
   manifestPath?: string;
+  checksum?: string;
   createdAt: string;
   updatedAt: string;
-  checksum?: string;
+  publishedAt?: string;
   error?: string;
 }

@@ -11,7 +11,9 @@
       "@web3-platform/domain-models": ["packages/domain-models/src/index.ts"],
       "@web3-platform/wallet-adapters": ["packages/wallet-adapters/src/index.ts"],
       "@web3-platform/api-contracts": ["packages/api-contracts/src/index.ts"],
-      "@web3-platform/event-contracts": ["packages/event-contracts/src/index.ts"]
+      "@web3-platform/event-contracts": ["packages/event-contracts/src/index.ts"],
+      "@web3-platform/builder-schema": ["packages/builder-schema/src/index.ts"],
+      "@web3-platform/builder-schema/*": ["packages/builder-schema/src/*"]
     }
   }
 }

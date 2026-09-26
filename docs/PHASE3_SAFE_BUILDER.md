@@ -1,28 +1,44 @@
-# Phase 3 Safe Builder
+# Production script.js refinement
 
-## Added capabilities
+This phase wires the dashboard builder into the API and adds a browser loader for generated artifacts.
 
-- Builder service for generating deterministic client `script.js` and `manifest.json` artifacts.
-- Build config validation including domain allowlist and EIP-712 domain constraints.
-- Build artifact status tracking (`QUEUED`, `COMPILING`, `READY`, `FAILED`).
-- Database migration for build configs, artifacts, and audit records.
-- Control-plane builder page scaffold and default builder config.
-- EIP-712 typed data validator and preview rendering module.
-- Safe Telegram notification scaffold for build status events.
-- Domain allowlist policy utility for runtime enforcement.
+## Added
 
-## Safe design rules
+- `POST /api/v1/builder/builds`
+- `GET /api/v1/builder/builds`
+- `GET /api/v1/builder/builds/:id`
+- deterministic `script.js` and `manifest.json` output under `artifacts/builds/{id}`
+- SHA-256 verification in the browser loader
+- dashboard builder form for compiling a client artifact
+- runtime mount helper for generated client scripts
+- builder schema path aliases
 
-1. The generated script only exposes preview/runtime utilities and explicit user-action hooks.
-2. No hidden authorization loops.
-3. No private-key handling in client or services.
-4. Build artifacts are versioned and checksummed.
-5. Domain execution is constrained by allowlist.
+## Local flow
 
-## Next tasks
+```bash
+pnpm install
+pnpm --filter @platform/api-gateway build
+node services/api-gateway/dist/index.js
+```
 
-- Wire builder-service routes into the API gateway.
-- Persist builds/configs in a database-backed repository.
-- Add artifact storage adapter (object store + signed URL retrieval).
-- Implement control-plane UI form + build history table.
-- Add automated tests for builder compile pipeline and typed-data validation.
+Create a build from the dashboard client or with:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/builder/builds \
+  -H 'content-type: application/json' \
+  -d '{
+    "name":"client-runtime",
+    "version":"1.0.0",
+    "domainAllowlist":["localhost"],
+    "modules":["wallet-modal","session-client","eip712-preview","tx-preview"],
+    "eip712":{
+      "enabled":true,
+      "domainName":"DashboardBuilder",
+      "domainVersion":"1",
+      "chainId":1337,
+      "verifyingContract":"0x0000000000000000000000000000000000000000"
+    }
+  }'
+```
+
+The service currently stores build metadata in memory and artifacts on the local filesystem. The next production step is replacing those adapters with the database and object storage implementations described in the runbooks.

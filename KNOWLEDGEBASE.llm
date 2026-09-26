@@ -1,0 +1,82 @@
+# KNOWLEDGEBASE.llm
+
+[project]
+name = "Web3 Transaction Platform"
+repository = "lackx741-tech/Implementation"
+stack = ["TypeScript", "Node.js", "Solidity", "SQL", "HTML"]
+package_manager = "pnpm"
+
+[mission]
+Build a transparent, user-consented web3 application platform with a dashboard builder that produces deterministic, reviewable client artifacts.
+
+[hard_constraints]
+- Every transaction request must be human-readable before authorization.
+- Authorization begins only after an explicit user action.
+- Never handle private keys, seed phrases, or custody material.
+- Never alter recipient, value, network, or calldata after preview.
+- Inline JavaScript is bootstrap-only.
+- Generated artifacts require a manifest, version, checksum, and domain allowlist.
+- Domain policy fails closed.
+- EIP-712 data is validated and displayed before signing.
+- Configuration, build, publish, and rollback actions are audited.
+- Do not add hidden redirects, silent retries, automatic authorization, or undisclosed calls.
+
+[repo_map]
+apps/web-dapp = "browser UI and workflow preview"
+apps/control-plane = "builder and operations dashboard"
+services = "API and domain services"
+workers = "asynchronous processing"
+packages = "shared models, schemas, adapters, and contracts"
+contracts = "non-custodial Solidity contracts"
+database = "migrations and fixtures"
+docs = "architecture, ADRs, and runbooks"
+
+[builder_outputs]
+- artifacts/builds/{buildId}/script.js
+- artifacts/builds/{buildId}/manifest.json
+
+[build_status]
+- QUEUED
+- VALIDATING
+- COMPILING
+- READY
+- FAILED
+- PUBLISHED
+- ROLLED_BACK
+
+[required_manifest_fields]
+- name
+- version
+- createdAt
+- checksum
+- modules
+- domainAllowlist
+- eip712
+
+[eip712_rules]
+- Validate domain name and version.
+- Validate positive chain ID.
+- Validate verifying contract address.
+- Validate primary type and type definitions.
+- Render domain, types, and message before signing.
+- Start signing only from an explicit visible confirmation.
+
+[domain_rules]
+- Use exact hostnames unless a documented environment policy says otherwise.
+- Do not silently broaden an allowlist.
+- Require a new config version for allowlist changes.
+- Test approved and unapproved hosts.
+
+[agent_process]
+1. Read README.md, Projectguides.txt, and the relevant phase document.
+2. Search existing modules before introducing new abstractions.
+3. Keep public interfaces typed and versioned.
+4. Add tests and docs with implementation changes.
+5. Run typecheck, build, tests, and contract checks where applicable.
+6. Report changed files, test results, and limitations.
+
+[unsafe_request_policy]
+Decline hidden signing, concealed transaction construction, automated authorization, private-key handling, credential harvesting, or deceptive wallet flows. Offer a transparent preview-and-confirm implementation instead.
+
+[definition_of_done]
+A feature is complete when implementation, tests, documentation, audit events, error handling, and deployment notes are all present and the hard constraints remain satisfied.

@@ -1,0 +1,731 @@
+# Project Implementation Guide
+
+**Project:** Web3 Transaction Platform Baseline  
+**Document:** Implementation and Development Guide  
+**Version:** 1.0.0  
+**Date:** 2026-09-26  
+**Status:** Development baseline
+
+---
+
+## 1. Purpose
+
+This guide explains how to install, run, test, extend, and deploy the repository baseline. The implementation is designed for transparent, user-controlled blockchain interactions.
+
+The platform must always:
+
+- show a human-readable transaction preview before authorization;
+- require an explicit user action for every authorization request;
+- keep transaction recipients, values, network, and calldata visible;
+- avoid private-key handling in browser code and application services;
+- support local and test networks before production deployment;
+- preserve an auditable workflow record for every operation.
+
+The baseline does not implement unattended authorization, hidden transaction replacement, custody, or automatic asset movement.
+
+---
+
+## 2. Repository Layout
+
+```text
+Implementation/
+├── apps/
+│   ├── web-dapp/                 # Browser dApp and workflow UI
+│   └── control-plane/            # Administrative UI foundation
+├── contracts/                    # Solidity contracts and Foundry files
+│   ├── src/
+│   ├── test/
+│   └── scripts/
+├── services/
+│   ├── api-gateway/              # HTTP entry point
+│   ├── session-service/           # Session lifecycle
+│   ├── workflow-service/          # Workflow and preview generation
+│   ├── transaction-service/       # Transaction state and chain interface
+│   ├── event-service/             # Event publication
+│   ├── reporting-service/         # Reporting projections
+│   └── export-service/            # Export jobs
+├── workers/
+│   ├── transaction-worker/
+│   ├── confirmation-worker/
+│   ├── projection-worker/
+│   └── export-worker/
+├── packages/
+│   ├── api-contracts/
+│   ├── event-contracts/
+│   ├── domain-models/
+│   ├── wallet-adapters/
+│   ├── chain-adapters/
+│   ├── ui-components/
+│   └── configuration/
+├── database/
+│   ├── migrations/
+│   ├── seeds/
+│   └── fixtures/
+├── infrastructure/
+├── docs/
+├── scaffold.sh
+└── Projectguides.txt
+```
+
+---
+
+## 3. Prerequisites
+
+Install the following locally:
+
+- Node.js 22 or later;
+- pnpm 10 or later;
+- Git;
+- a local PostgreSQL-compatible database for persistence work;
+- Foundry only when working on Solidity contracts;
+- a local blockchain simulator or public test network for integration testing.
+
+Check versions:
+
+```bash
+node --version
+pnpm --version
+git --version
+forge --version
+```
+
+Do not use production credentials in local development.
+
+---
+
+## 4. Initial Setup
+
+```bash
+git clone https://github.com/lackx741-tech/Implementation.git
+cd Implementation
+pnpm install
+```
+
+If the project tree has not been generated in a new checkout:
+
+```bash
+chmod +x scaffold.sh
+./scaffold.sh
+```
+
+The scaffold script creates placeholder directories. Existing implementation files should be preserved when running it against the current repository.
+
+Create local configuration from the example files:
+
+```bash
+cp infrastructure/environments/local/.env.example infrastructure/environments/local/.env
+```
+
+Use local-only values for all variables. Do not commit `.env` files.
+
+---
+
+## 5. Recommended Environment Variables
+
+Example names for local development:
+
+```dotenv
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://localhost:5432/web3_platform
+EVENT_TRANSPORT=memory
+QUEUE_TRANSPORT=memory
+CHAIN_NETWORK=local-development
+CHAIN_RPC_URL=http://127.0.0.1:8545
+PUBLIC_APP_URL=http://localhost:5173
+API_BASE_URL=http://localhost:3000
+```
+
+For deployment, store values in the platform secret manager rather than source control. Never place private keys, seed phrases, access tokens, or signing credentials in frontend bundles, fixtures, documentation, or committed configuration.
+
+---
+
+## 6. Workspace Commands
+
+Install dependencies:
+
+```bash
+pnpm install
+```
+
+Type-check the repository:
+
+```bash
+pnpm typecheck
+```
+
+Build all configured packages and applications:
+
+```bash
+pnpm build
+```
+
+Run tests:
+
+```bash
+pnpm test
+```
+
+Format files:
+
+```bash
+pnpm format
+```
+
+Run the API gateway after building:
+
+```bash
+pnpm --filter @platform/api-gateway build
+node services/api-gateway/dist/index.js
+```
+
+The API health check is:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Expected response shape:
+
+```json
+{
+  "status": "ok",
+  "service": "api-gateway"
+}
+```
+
+---
+
+## 7. Frontend Implementation
+
+### 7.1 Application Flow
+
+The browser application follows this sequence:
+
+```text
+Boot
+  -> Create session
+  -> Discover provider adapters
+  -> Connect selected provider
+  -> Start workflow
+  -> Render transaction preview
+  -> Wait for explicit user confirmation
+  -> Request provider authorization
+  -> Submit returned signed object
+  -> Show processing status
+  -> Show final result
+```
+
+### 7.2 Inline Script Policy
+
+Inline JavaScript is limited to application bootstrapping. Business logic must remain in versioned modules under `apps/web-dapp/src/`.
+
+Good:
+
+```html
+<script type="module">
+  import { startDemo } from './src/pages/WorkflowPage.js';
+  const root = document.querySelector('#transaction-preview');
+  if (root) startDemo(root, 'http://localhost:3000', '0x0000000000000000000000000000000000000000');
+</script>
+```
+
+Do not place wallet selection, transaction construction, authorization loops, credentials, or hidden redirects in inline script blocks.
+
+### 7.3 Modal Requirements
+
+The transaction modal must display:
+
+- application name;
+- selected network;
+- wallet address or account context;
+- recipient address;
+- native value and token amounts;
+- decoded method name where available;
+- contract address;
+- calldata summary;
+- estimated fee or resource information;
+- a clear confirm button;
+- a clear cancel button;
+- a link to inspect the raw request.
+
+The confirm button must be the only action that begins wallet authorization. A modal must not auto-submit, auto-connect, or auto-authorize on page load.
+
+### 7.4 Provider Adapter Contract
+
+Each provider adapter implements the shared interface in `packages/wallet-adapters/src/index.ts`:
+
+```ts
+interface WalletAdapter {
+  readonly id: string;
+  readonly displayName: string;
+  isAvailable(): Promise<boolean>;
+  connect(): Promise<WalletConnection>;
+  disconnect(): Promise<void>;
+  getAddress(): Promise<string>;
+  getNetwork(): Promise<string>;
+  authorizeTransaction(request: TransactionRequest): Promise<SignedTransaction>;
+}
+```
+
+Adapters must:
+
+- return the provider-reported account;
+- return the provider-reported network;
+- reject if the requested network is not selected;
+- expose provider errors without suppressing them;
+- never retain signing material;
+- never change a request after the preview is displayed.
+
+---
+
+## 8. Builder Implementation
+
+### 8.1 Builder Responsibility
+
+A builder converts a selected, versioned workflow template into unsigned, reviewable transaction requests.
+
+The builder must not:
+
+- access private keys;
+- sign transactions;
+- hide transaction recipients;
+- substitute recipients after preview;
+- add an unannounced transaction;
+- invoke arbitrary contract methods without a declared template;
+- bypass the confirmation interface.
+
+### 8.2 Builder Input
+
+```ts
+interface BuilderContext {
+  chainId: string;
+  recipient: string;
+  account?: string;
+  templateId: string;
+  templateVersion: string;
+}
+```
+
+### 8.3 Builder Output
+
+```ts
+interface BuiltRequest {
+  transactionId: string;
+  chainId: string;
+  to: string;
+  value: string;
+  data: string;
+  description: string;
+  decoded?: {
+    method?: string;
+    parameters?: Record<string, unknown>;
+  };
+}
+```
+
+### 8.4 Builder Tests
+
+Every builder requires fixtures covering:
+
+- valid input;
+- invalid network;
+- invalid recipient;
+- zero-value interaction;
+- non-zero value interaction;
+- decoded calldata;
+- multiple requests and ordering;
+- expiration;
+- template version mismatch.
+
+---
+
+## 9. API Implementation
+
+### 9.1 Current Routes
+
+```text
+GET  /health
+POST /api/v1/sessions
+GET  /api/v1/sessions/:sessionId
+POST /api/v1/workflows
+POST /api/v1/transactions/signed
+```
+
+### 9.2 Session Creation
+
+Request:
+
+```http
+POST /api/v1/sessions
+content-type: application/json
+```
+
+Response:
+
+```json
+{
+  "session": {
+    "id": "session-id",
+    "status": "CREATED",
+    "createdAt": "2026-09-26T18:24:08.000Z"
+  }
+}
+```
+
+### 9.3 Workflow Creation
+
+Request:
+
+```json
+{
+  "sessionId": "session-id",
+  "chainId": "local-development",
+  "recipient": "0x0000000000000000000000000000000000000000"
+}
+```
+
+The response must include a workflow ID and preview records. The frontend renders these records before requesting authorization.
+
+### 9.4 Signed Submission
+
+The endpoint currently returns a queue acknowledgement. A production implementation must:
+
+1. validate the workflow ID;
+2. validate the transaction ID;
+3. ensure the signed object corresponds to the displayed request;
+4. reject expired or duplicated submissions;
+5. append a status event;
+6. enqueue a chain submission job;
+7. expose a status reference to the client.
+
+---
+
+## 10. Event Model
+
+All event records use a common envelope:
+
+```json
+{
+  "eventId": "event-id",
+  "sequence": 1,
+  "occurredAt": "2026-09-26T18:24:08Z",
+  "payload": {
+    "type": "workflow_preview_ready",
+    "workflowId": "workflow-id"
+  }
+}
+```
+
+Recommended event order:
+
+```text
+session_created
+wallet_discovered
+wallet_connected
+workflow_started
+workflow_preview_ready
+authorization_requested
+signed_payload_received
+transaction_queued
+transaction_submitted
+transaction_confirmed
+workflow_completed
+```
+
+Events should be append-only. Reporting tables may be rebuilt from events when projections change.
+
+---
+
+## 11. Smart Contract Development
+
+### 11.1 Current Contract
+
+`contracts/src/WorkflowRegistry.sol` is a non-custodial metadata registry. It stores template metadata and emits events. It does not hold or transfer assets.
+
+### 11.2 Local Contract Commands
+
+```bash
+cd contracts
+forge build
+forge test
+```
+
+Run formatting:
+
+```bash
+forge fmt
+```
+
+### 11.3 Deployment Process
+
+Use a local node or public test network first:
+
+```bash
+export RPC_URL=http://127.0.0.1:8545
+export DEPLOYER_PRIVATE_KEY=<local-test-key>
+./scripts/deploy.sh
+```
+
+The deployment key must be a disposable local/test key. Never use a production key in a repository shell, CI log, issue, or chat message.
+
+### 11.4 Contract Acceptance Gates
+
+Before any production deployment:
+
+- compile with the pinned Solidity version;
+- run unit tests;
+- run static analysis;
+- inspect generated ABI;
+- verify deployed bytecode;
+- test ownership transitions;
+- test unknown-template handling;
+- test event contents;
+- perform independent review;
+- document the deployed address and network.
+
+---
+
+## 12. Database Implementation
+
+The initial migration is in `database/migrations/001_initial.sql`.
+
+The next migrations should add:
+
+```text
+wallet_connections
+transaction_bundles
+transactions
+transaction_status_history
+workflow_templates
+configuration_versions
+operators
+roles
+activity_records
+export_jobs
+```
+
+Each table should include:
+
+- immutable primary identifier;
+- created timestamp;
+- updated timestamp where mutable;
+- lifecycle status where applicable;
+- indexes for session, workflow, and transaction lookups;
+- explicit foreign keys;
+- migration tests.
+
+Do not store private keys, seed phrases, or raw wallet credentials in the application database.
+
+---
+
+## 13. Worker Implementation
+
+Workers should consume typed jobs and produce typed results.
+
+### Transaction Worker
+
+- receives a validated submission job;
+- loads the transaction record;
+- calls the configured chain adapter;
+- writes a submission reference;
+- publishes a status event;
+- retries only recoverable errors.
+
+### Confirmation Worker
+
+- polls pending submission references;
+- detects confirmation, replacement, timeout, and failure;
+- writes status history;
+- publishes workflow updates.
+
+### Projection Worker
+
+- consumes workflow events;
+- updates reporting tables;
+- tracks projection checkpoints;
+- supports replay from a selected event sequence.
+
+### Export Worker
+
+- validates the export request;
+- executes a bounded query;
+- writes an export artifact;
+- updates export status;
+- expires old artifacts according to policy.
+
+---
+
+## 14. Control Plane Implementation
+
+The control plane should provide:
+
+- workflow list with filters;
+- transaction status list;
+- configuration version history;
+- template editor with preview;
+- operator activity history;
+- report dashboards;
+- export job status.
+
+Configuration changes must be versioned. A template change must not silently alter a workflow already in progress. Existing workflows retain the configuration snapshot used when they were created.
+
+---
+
+## 15. Testing Plan
+
+### Unit Tests
+
+- model validation;
+- state transitions;
+- builder output;
+- adapter behavior;
+- event serialization;
+- configuration merging.
+
+### API Tests
+
+- successful session creation;
+- missing required fields;
+- unknown session;
+- workflow preview response;
+- malformed signed payload;
+- duplicate submission;
+- expired workflow;
+- normalized error responses.
+
+### Browser Tests
+
+- modal opens;
+- preview fields render;
+- cancel closes modal;
+- confirm invokes adapter once;
+- provider rejection renders a useful message;
+- page refresh restores non-sensitive workflow state;
+- no authorization occurs before confirmation.
+
+### Contract Tests
+
+- template publication;
+- template reads;
+- status changes;
+- ownership transition;
+- emitted events;
+- invalid identifiers.
+
+---
+
+## 16. Local End-to-End Walkthrough
+
+Start the API:
+
+```bash
+pnpm --filter @platform/api-gateway build
+node services/api-gateway/dist/index.js
+```
+
+Create a session:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/sessions
+```
+
+Use the returned session ID to create a preview workflow:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/workflows \
+  -H 'content-type: application/json' \
+  -d '{
+    "sessionId": "REPLACE_SESSION_ID",
+    "chainId": "local-development",
+    "recipient": "0x0000000000000000000000000000000000000000"
+  }'
+```
+
+The returned workflow should be rendered in the frontend modal. At this stage, the baseline is a preview environment and does not connect to a live submission adapter.
+
+---
+
+## 17. Production Readiness Checklist
+
+### Application
+
+- [ ] API contracts are versioned.
+- [ ] All inputs are schema-validated.
+- [ ] All workflow states are persisted.
+- [ ] All transaction previews are human-readable.
+- [ ] Every authorization requires explicit confirmation.
+- [ ] Duplicate requests are rejected.
+- [ ] Expired workflows are rejected.
+
+### Blockchain Integration
+
+- [ ] Network IDs are validated.
+- [ ] Recipient addresses are validated.
+- [ ] Chain adapters are tested against a test network.
+- [ ] Submission and confirmation states are persisted.
+- [ ] Network errors are normalized.
+- [ ] Contract addresses are versioned by environment.
+- [ ] Independent contract review is complete.
+
+### Operations
+
+- [ ] Dashboard permissions are implemented.
+- [ ] Configuration changes are versioned.
+- [ ] Export jobs are bounded and logged.
+- [ ] Operational events are queryable.
+- [ ] Deployment procedures are documented.
+
+### Delivery
+
+- [ ] CI runs type-checking, tests, builds, and contract checks.
+- [ ] Staging is isolated from production.
+- [ ] Secrets are managed outside source control.
+- [ ] Rollback procedures are tested.
+- [ ] Database migrations are reversible or have a recovery plan.
+
+---
+
+## 18. Suggested Next Implementation Tasks
+
+1. Add a schema-validation package for API requests and responses.
+2. Convert in-memory session storage to the relational database.
+3. Add a real event bus with replay support.
+4. Implement a local chain adapter using a simulator.
+5. Add transaction decoding for the preview modal.
+6. Add browser tests for explicit confirmation behavior.
+7. Add control-plane routes and read-only workflow tables.
+8. Add transaction status polling through a worker.
+9. Add contract ABI generation to the build process.
+10. Add CI workflows for TypeScript and Solidity checks.
+
+---
+
+## 19. Change Management
+
+For every significant change:
+
+1. Update the relevant interface or architecture document.
+2. Add or update tests.
+3. Add an architecture decision record if the design changes.
+4. Update migration files for data changes.
+5. Update this guide when developer workflow changes.
+6. Record the change in the repository changelog.
+
+Do not combine unrelated architecture, data, and deployment changes in one unreviewed commit.
+
+---
+
+## 20. Definition of Done
+
+A feature is complete when:
+
+- its contract is documented;
+- its implementation is typed;
+- its tests pass;
+- its state transitions are observable;
+- its errors are handled;
+- its user-visible behavior is clear;
+- its operational behavior is documented;
+- its deployment impact is understood;
+- its rollback or recovery path is known.

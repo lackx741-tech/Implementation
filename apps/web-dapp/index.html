@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web3 Platform</title>
+  </head>
+  <body>
+    <main>
+      <h1>Web3 Workflow</h1>
+      <section id="transaction-preview" aria-live="polite"></section>
+    </main>
+    <script type="module">
+      // Inline code is limited to bootstrapping. Application behavior lives in modules.
+      import { startDemo } from './src/pages/WorkflowPage.js';
+      const root = document.querySelector('#transaction-preview');
+      if (root) startDemo(root, 'http://localhost:3000', '0x0000000000000000000000000000000000000000');
+    </script>
+  </body>
+</html>

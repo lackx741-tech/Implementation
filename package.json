@@ -1,0 +1,13 @@
+{
+  "name": "web3-platform-baseline",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "node --test",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "latest",
+    "typescript": "latest"
+  }
+}
